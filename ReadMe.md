@@ -1,8 +1,10 @@
 # PooledMap / PooledMap
 
 PooledMap 是一个高性能的 C++ Map 容器实现，它在保留 `std::map` 功能的同时，显著提升了内存使用效率和访问性能。
+可以作为std::map的一个高性能平替
 
 PooledMap is a high-performance C++ Map container implementation that preserves `std::map` functionality while significantly improving memory efficiency and access performance.
+It can be used as a high-performance alternative to std::map.
 
 ---
 
