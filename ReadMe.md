@@ -85,7 +85,43 @@ int main() {
 }
 ```
 
+与std:map的性能对比测试：
 Comparision of performance with that of std::map:
+
+测试用例：
+10000 个对象的插入，遍历，删除一半，并再次遍历
+Testing Example:
+Insertion of 10,000 objects, traversal, deletion of half of them, and traversal again.
+
+```text
+==== std::map Test ====
+Insert: 1486 ms
+Traverse: 472 ms
+Erase: 1418 ms
+Traverse2: 0 ms
+Total: 3377 ms
+
+==== PooledMap Test ====
+Insert: 1227 ms
+Traverse: 309 ms
+Erase: 796 ms
+Traverse2: 0 ms
+Total: 2333 ms
+
+==== std::map Test ====
+Insert: 1534 ms
+Traverse: 498 ms
+Erase: 1730 ms
+Traverse2: 0 ms
+Total: 3762 ms
+
+==== PooledMap Test ====
+Insert: 1206 ms
+Traverse: 457 ms
+Erase: 936 ms
+Traverse2: 0 ms
+Total: 2601 ms
+```
 
 
 PooledMap 适合对性能敏感、节点频繁分配释放的场景，例如游戏开发、金融交易、实时数据处理等。
