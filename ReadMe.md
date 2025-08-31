@@ -114,8 +114,6 @@ Erase: 936 ms
 Traverse2: 0 ms
 Total: 2601 ms
 
----
-
 PooledMap 适合对性能敏感、节点频繁分配释放的场景，例如游戏开发、金融交易、实时数据处理等。
 
 PooledMap is suitable for performance-critical scenarios where nodes are frequently allocated and deallocated, such as game development, financial trading, and real-time data processing.
