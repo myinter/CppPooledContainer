@@ -85,6 +85,37 @@ int main() {
 }
 ```
 
+```text
+==== std::map Test ====
+Insert: 1486 ms
+Traverse: 472 ms
+Erase: 1418 ms
+Traverse2: 0 ms
+Total: 3377 ms
+
+==== PooledMap Test ====
+Insert: 1227 ms
+Traverse: 309 ms
+Erase: 796 ms
+Traverse2: 0 ms
+Total: 2333 ms
+
+==== std::map Test ====
+Insert: 1534 ms
+Traverse: 498 ms
+Erase: 1730 ms
+Traverse2: 0 ms
+Total: 3762 ms
+
+==== PooledMap Test ====
+Insert: 1206 ms
+Traverse: 457 ms
+Erase: 936 ms
+Traverse2: 0 ms
+Total: 2601 ms
+
+```text
+
 ---
 
 PooledMap 适合对性能敏感、节点频繁分配释放的场景，例如游戏开发、金融交易、实时数据处理等。
