@@ -1,0 +1,240 @@
+/*
+ * PooledList.hpp
+ *
+ * 版权所有 (c) 2025 大熊哥哥 (Bighiung)
+ * All rights reserved / 保留所有权利
+ *
+ * 使用许可 / License Terms:
+ *
+ * 本代码允许在个人、学术及商业项目中自由使用、修改和分发，
+ * 但必须在所有副本及衍生作品中保留本声明，且明确标注作者为：
+ *
+ *      大熊哥哥 (Bighiung)
+ *
+ * 禁止去除或修改此版权声明。
+ *
+ * This code is free to use, modify, and distribute in personal,
+ * academic, and commercial projects, provided that this notice
+ * is retained in all copies or derivative works, and the author
+ * is explicitly acknowledged as:
+ *
+ *      大熊哥哥 (Bighiung)
+ *
+ * Removal or alteration of this copyright notice is prohibited.
+ *
+ * ---------------------------------------------------------------
+ *
+ * PooledList - 池化链表模板类
+ *
+ * 功能 / Features:
+ * 1. 基于 SegmentedObjectPool 实现节点池化 / Node allocation is managed via SegmentedObjectPool.
+ * 2. 提供 push_back、push_front、insert、erase、swap 等链表操作 / Supports push_back, push_front, insert, erase, swap operations.
+ * 3. 支持通过闭包迭代访问节点 / Allows iteration over elements via lambda/closure functions.
+ * 4. 支持 Hash 索引加速的随机访问 / Provides hash-indexed fast access via operator[].
+ * 5. 可通过 std::move 将另一个同类型 PooledList 插入指定位置 / Supports move-insertion of another PooledList.
+ * 6. 节点在插入/删除/交换时自动更新索引，提高性能 / Updates hash index efficiently on modifications.
+ * 7. 适用于性能敏感场景，如游戏、即时通信和高频交易 / Suitable for performance-critical applications like games, IM, HFT.
+ */
+
+#pragma once
+#include "SegmentedObjectPool.hpp"
+#include <functional>
+#include <stdexcept>
+#include <unordered_map>
+#include <cstddef>
+#include <utility>
+
+template <typename T>
+class PooledList {
+private:
+    struct Node : public PooledObject<Node> {
+        T _value;
+        Node* _prev = nullptr;
+        Node* _next = nullptr;
+
+        template <typename... Args>
+        Node(Args&&... args) : _value(std::forward<Args>(args)...) {}
+        void reset() override { _prev = _next = nullptr; }
+    };
+
+    Node* _head = nullptr;
+    Node* _tail = nullptr;
+    std::size_t _size = 0;
+    std::unordered_map<std::size_t, Node*> _hashIndex; // 索引加速
+
+public:
+    PooledList() = default;
+    ~PooledList() { clear(); }
+
+    bool empty() const noexcept { return _size == 0; }
+    std::size_t size() const noexcept { return _size; }
+
+    T& front() { if (!_head) throw std::out_of_range("PooledList is empty"); return _head->_value; }
+    T& back()  { if (!_tail) throw std::out_of_range("PooledList is empty"); return _tail->_value; }
+
+    // -------- 插入 --------
+    template <typename... Args>
+    void push_back(Args&&... args) {
+        Node* n = Node::create(std::forward<Args>(args)...);
+        if (!_head) {
+            _head = _tail = n;
+        } else {
+            _tail->_next = n;
+            n->_prev = _tail;
+            _tail = n;
+        }
+        _hashIndex[_size] = n;
+        ++_size;
+    }
+
+    template <typename... Args>
+    void push_front(Args&&... args) {
+        Node* n = Node::create(std::forward<Args>(args)...);
+        if (!_head) {
+            _head = _tail = n;
+        } else {
+            n->_next = _head;
+            _head->_prev = n;
+            _head = n;
+        }
+        // 只修改已有索引的偏移
+        for (std::size_t i = _size; i > 0; --i) {
+            _hashIndex[i] = _hashIndex[i-1];
+        }
+        _hashIndex[0] = n;
+        ++_size;
+    }
+
+    // -------- 插入指定值 --------
+    void insert(std::size_t pos, const T& value) {
+        if (pos > _size) throw std::out_of_range("PooledList insert position out of range");
+        Node* n = Node::create(value);
+        if (pos == 0) {
+            n->_next = _head;
+            if (_head) _head->_prev = n;
+            _head = n;
+            if (!_tail) _tail = n;
+        } else if (pos == _size) {
+            n->_prev = _tail;
+            if (_tail) _tail->_next = n;
+            _tail = n;
+        } else {
+            Node* cur = _hashIndex.at(pos);
+            Node* prev = cur->_prev;
+            prev->_next = n;
+            n->_prev = prev;
+            n->_next = cur;
+            cur->_prev = n;
+        }
+        // 更新 hash 索引
+        for (std::size_t i = _size; i > pos; --i) {
+            _hashIndex[i] = _hashIndex[i-1];
+        }
+        _hashIndex[pos] = n;
+        ++_size;
+    }
+
+    // -------- 插入另一个 PooledList (move) --------
+    void insert_list(std::size_t pos, PooledList&& other) {
+        if (pos > _size) throw std::out_of_range("PooledList insert position out of range");
+        if (other.empty()) return;
+
+        if (pos == 0) {
+            other._tail->_next = _head;
+            if (_head) _head->_prev = other._tail;
+            _head = other._head;
+            if (!_tail) _tail = other._tail;
+        } else if (pos == _size) {
+            _tail->_next = other._head;
+            other._head->_prev = _tail;
+            _tail = other._tail;
+        } else {
+            Node* cur = _hashIndex.at(pos);
+            Node* prev = cur->_prev;
+            prev->_next = other._head;
+            other._head->_prev = prev;
+            other._tail->_next = cur;
+            cur->_prev = other._tail;
+        }
+
+        std::size_t idx = pos;
+        for (Node* n = other._head; n; n = n->_next) {
+            _hashIndex[idx++] = n;
+            if (n == other._tail) break;
+        }
+
+        for (std::size_t i = _size; i > pos; --i) {
+            _hashIndex[i + other._size - 1] = _hashIndex[i - 1];
+        }
+
+        _size += other._size;
+        other._head = other._tail = nullptr;
+        other._size = 0;
+        other._hashIndex.clear();
+    }
+
+    void erase(Node* n, std::size_t idx) {
+        if (!n) return;
+        Node* prev = n->_prev;
+        Node* next = n->_next;
+
+        if (prev) prev->_next = next; else _head = next;
+        if (next) next->_prev = prev; else _tail = prev;
+
+        n->recycle();
+        --_size;
+
+        for (std::size_t i = idx; i < _size; ++i) {
+            _hashIndex[i] = _hashIndex[i+1];
+        }
+        _hashIndex.erase(_size);
+    }
+
+    void pop_front() { if (_head) erase(_head, 0); }
+    void pop_back()  { if (_tail) erase(_tail, _size - 1); }
+
+    void clear() {
+        Node* cur = _head;
+        while (cur) {
+            Node* next = cur->_next;
+            cur->recycle();
+            cur = next;
+        }
+        _head = _tail = nullptr;
+        _size = 0;
+        _hashIndex.clear();
+    }
+
+    void for_each(const std::function<void(T&)>& fn) {
+        Node* cur = _head;
+        while (cur) {
+            fn(cur->_value);
+            cur = cur->_next;
+        }
+    }
+
+    void for_each_const(const std::function<void(const T&)>& fn) const {
+        Node* cur = _head;
+        while (cur) {
+            fn(cur->_value);
+            cur = cur->_next;
+        }
+    }
+
+    T& operator[](std::size_t idx) {
+        if (idx >= _size) throw std::out_of_range("PooledList index out of range");
+        return _hashIndex.at(idx)->_value;
+    }
+
+    const T& operator[](std::size_t idx) const {
+        if (idx >= _size) throw std::out_of_range("PooledList index out of range");
+        return _hashIndex.at(idx)->_value;
+    }
+
+    void swap_nodes(std::size_t idx1, std::size_t idx2) {
+        if (idx1 >= _size || idx2 >= _size) throw std::out_of_range("PooledList index out of range");
+        if (idx1 == idx2) return;
+        std::swap(_hashIndex[idx1], _hashIndex[idx2]);
+    }
+};
+
