@@ -53,6 +53,7 @@
 #include <vector>
 #include <type_traits>
 #include <string>
+#include "SegmentedObjectPool.hpp"
 
 template <typename Key, typename Value>
 class PooledMap {
